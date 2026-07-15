@@ -18,79 +18,34 @@ const flowers = ['f1','f2','f3','f4','f5','f6'].map(id => document.getElementByI
 
 /* ---------- tunables ---------- */
 
-// Scroll budget scales with viewport height so the sequence feels
-// the same length on a short phone and a tall monitor.
 function computeBudget() {
   return Math.round(Math.min(Math.max(window.innerHeight * 2.2, 1200), 2600));
 }
 let TOTAL_SCROLL = computeBudget();
 
-/* ============================================================
-   >>> HAND TUNING — EDIT EVERYTHING BELOW THIS LINE <<<
-
-   All values are % of the hands-stage box, so they hold at
-   every screen size. Positive x = right, positive y = down.
-   ============================================================ */
-
-// ---- MEASURED FROM THE SOURCE PNGs (all 2000x1414) ----------------
-//   The artwork does NOT fill its canvas. Content occupies:
-//     groomhand    : x 12.1%-82.8%, y  7.4%-60.0%   (ring tip @ 82.8, 18.7)
-//     groomhandcut : x 12.2%-82.8%, y  7.8%-60.0%   (same art, top wedge cut)
-//     bridehand    : x 12.9%-87.1%, y 10.0%-51.8%   (fingertips @ 12.9, 37.2)
-//
-//   Because each hand sits in the UPPER-LEFT of its canvas, positioning
-//   the canvas at 0,0 makes the hand look high and left. The y values
-//   below already include the correction that re-centres the artwork
-//   (+16.3% for groom, +19.1% for bride). That is why they look large.
-// -------------------------------------------------------------------
-
-// WHERE EACH HAND ENDS UP (the final clasp), as % of the stage box.
-//
-//   THE STACK (bottom -> top):
-//     1. groom    — full groom hand + sleeve
-//     2. bride    — bride hand, crosses OVER the groom's fingers
-//     3. brideCut — same groom art with a wedge removed near the top,
-//                   redrawn ABOVE the bride so his fingertips read as
-//                   being in front of hers. This is the interlock.
-//
-//   groom and brideCut are the SAME drawing on two layers — their
-//   x / y / rot MUST stay identical or you get a visible double image.
-//   Solved so the clasped pair is centred in the stage and his ring
-//   sits just above her ring finger. At this pose the two hands span
-//   ~147% of the stage WIDTH and ~64% of its height — the composition
-//   is wide and flat, so WIDTH is what clips first, never height.
-//   Recentred so the clasped pair's bounding box sits dead-centre in
-//   the stage box (it was +5% right, which made one side cut first).
 const POSE = {
   groom:    { x: -35.0, y:  23.8, rot:  0   },  // bottom layer
   brideCut: { x: -35.0, y:  23.8, rot:  0   },  // MUST match groom
   bride:    { x:  30.3, y:   15.5, rot:  15 }   // ring finger under his ring
 };
 
-// WHERE EACH HAND STARTS — offset from its POSE, before scrolling.
-//   x: negative = starts further left | positive = starts further right
-//   y: negative = starts higher up    | positive = starts lower down
 const ENTRY = {
   groom:    { x: -38, y:   0, rot:  0 },   // groom: in from the left
   brideCut: { x: -38, y:   0, rot:  0 },   // MUST match groom exactly
   bride:    { x:  38, y: -42, rot: 5 }    // bride: right + above => diagonal
 };
 
-// HOW BIG THE HANDS ARE (multiplies on top of .hands-stage width).
-//   The clasped pair spans ~147% of the stage width, so the stage is
-//   sized in CSS to let that overflow off both edges (the sleeve and
-//   the bangles are meant to bleed). Raising END past ~1.1 starts
-//   eating the fingertips — grow the CSS stage width instead.
 const SCALE = { START: 0.82, END: 1.00 };
 
-// Fraction of the scroll budget the hands take to travel into place.
 const HANDS_PHASE = 0.42;
 
-// TEXT FADE — all_text.png starts fully invisible and fades IN once
-// the hands have arrived. START = scroll fraction where it begins
-// fading in (should be >= HANDS_PHASE so it waits for the hands),
-// END = where it is fully visible.
 const TEXT_FADE = { START: 0.42, END: 0.75 };
+
+const AUTO = {
+  DELAY:    600,   // ms to wait after the loader fades before starting
+  DURATION: 2600,  // ms the auto-scroll takes
+  TARGET:   0.62   // fraction of the full sequence to play (0-1)
+};
 
 /* ============================================================
    >>> END HAND TUNING <<<
@@ -222,9 +177,59 @@ function advance(delta) {
   requestRender();
 }
 
+/* ---------- auto-scroll (plays once, any input cancels) ---------- */
+
+let autoRAF   = null;
+let autoDone  = false;   // ensures it can never run twice
+
+function cancelAuto() {
+  if (autoRAF !== null) {
+    cancelAnimationFrame(autoRAF);
+    autoRAF = null;
+  }
+  autoDone = true;
+}
+
+function startAuto() {
+  if (autoDone) return;
+
+  // respect the OS "reduce motion" setting: jump to the same resting
+  // frame instead of animating there
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    virtualScroll = TOTAL_SCROLL * AUTO.TARGET;
+    autoDone = true;
+    requestRender();
+    return;
+  }
+
+  const from  = virtualScroll;
+  const to    = TOTAL_SCROLL * AUTO.TARGET;
+  const t0    = performance.now();
+  // ease-in-out: gentle start, gentle stop — reads as intentional
+  const easeIO = t => t < 0.5
+    ? 4 * t * t * t
+    : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+  const step = (now) => {
+    if (autoDone) return;
+    const t = clamp((now - t0) / AUTO.DURATION, 0, 1);
+    virtualScroll = from + (to - from) * easeIO(t);
+    render();                       // direct: we're already in a rAF
+    if (t < 1) {
+      autoRAF = requestAnimationFrame(step);
+    } else {
+      autoRAF = null;
+      autoDone = true;              // finished naturally; never replay
+    }
+  };
+
+  autoRAF = requestAnimationFrame(step);
+}
+
 /* ---------- input: wheel ---------- */
 
 window.addEventListener('wheel', (e) => {
+  cancelAuto();
   if (locked) {
     e.preventDefault();
     advance(e.deltaY);
@@ -242,6 +247,7 @@ let touchStartY = 0;
 let lastTouchY  = 0;
 
 window.addEventListener('touchstart', (e) => {
+  cancelAuto();
   touchStartY = lastTouchY = e.touches[0].clientY;
 }, { passive: true });
 
@@ -265,6 +271,7 @@ window.addEventListener('touchmove', (e) => {
 /* ---------- input: keyboard (accessibility) ---------- */
 
 window.addEventListener('keydown', (e) => {
+  cancelAuto();
   if (!locked) return;
   const step = TOTAL_SCROLL / 12;
   if (['ArrowDown', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); advance(step); }
@@ -279,6 +286,9 @@ let resizeTimer;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
+    // an in-flight auto-scroll holds a stale target; stop it rather
+    // than let it fight the new budget
+    cancelAuto();
     const pct = virtualScroll / TOTAL_SCROLL;   // preserve position through rotation
     TOTAL_SCROLL = computeBudget();
     virtualScroll = pct * TOTAL_SCROLL;
@@ -288,7 +298,114 @@ window.addEventListener('resize', () => {
 
 window.addEventListener('orientationchange', () => setTimeout(requestRender, 250));
 
+/* ---------- loading screen ----------
+   Tracks REAL decode progress of the artwork, so the ring reflects
+   something true rather than a fake timer. A hard timeout guarantees
+   the loader always clears even if an asset 404s or stalls. */
+
+const loader    = document.getElementById('loader');
+const loaderPct = document.getElementById('loaderPct');
+const loaderMsg = document.getElementById('loaderMsg');
+const ringFill  = document.getElementById('ringFill');
+
+const RING_C = 276.46;          // 2 * PI * r, r=44 (matches the CSS)
+const LOADER_TIMEOUT = 12000;   // ms — never trap the visitor
+
+const MESSAGES = [
+  'Setting the scene',
+  'Arranging the flowers',
+  'Polishing the ring',
+  'Almost ready'
+];
+
+// Every image the first frame depends on.
+const ASSETS = [
+  'images/bbg.png',
+  'images/texts/all_text.png',
+  'images/groomhand.png',
+  'images/bridehand.png',
+  'images/groomhandcut.png',
+  'images/objects/f1.png',
+  'images/objects/f2.png',
+  'images/objects/f3.png',
+  'images/objects/f4.png',
+  'images/objects/f5.png',
+  'images/objects/f6.png'
+];
+
+let loaded    = 0;
+let finished  = false;
+let shownPct  = 0;
+
+function setProgress(frac) {
+  const pct = Math.round(frac * 100);
+  // never let the number go backwards
+  if (pct < shownPct) return;
+  shownPct = pct;
+  if (loaderPct) loaderPct.textContent = `${pct}%`;
+  if (ringFill)  ringFill.style.strokeDashoffset = RING_C * (1 - frac);
+
+  const idx = Math.min(Math.floor(frac * MESSAGES.length), MESSAGES.length - 1);
+  if (loaderMsg && loaderMsg.dataset.idx !== String(idx)) {
+    loaderMsg.dataset.idx = String(idx);
+    loaderMsg.classList.add('is-swapping');
+    setTimeout(() => {
+      loaderMsg.textContent = MESSAGES[idx];
+      loaderMsg.classList.remove('is-swapping');
+    }, 200);
+  }
+}
+
+function finish() {
+  if (finished) return;
+  finished = true;
+
+  setProgress(1);
+
+  // let the ring visibly reach 100% before the curtain lifts
+  setTimeout(() => {
+    if (loader) {
+      loader.classList.add('loader--done');
+      // drop the node once the fade finishes — it's inert after this
+      setTimeout(() => loader && loader.remove(), 800);
+    }
+    // play the sequence forward once, hands-free
+    setTimeout(startAuto, AUTO.DELAY);
+  }, 420);
+}
+
+function bumpLoaded() {
+  loaded++;
+  setProgress(Math.min(loaded / ASSETS.length, 1));
+  if (loaded >= ASSETS.length) finish();
+}
+
+function preload() {
+  setProgress(0);
+
+  ASSETS.forEach((src) => {
+    const img = new Image();
+    let counted = false;
+    // guard: a cached image can fire onload AND report .complete
+    // synchronously — without this the count double-fires and the
+    // ring jumps past 100%.
+    const once = () => {
+      if (counted) return;
+      counted = true;
+      bumpLoaded();
+    };
+    img.onload  = once;
+    img.onerror = once;   // a 404 must not stall the loader
+    img.src = src;
+    if (img.complete) once();
+  });
+
+  // safety net
+  setTimeout(finish, LOADER_TIMEOUT);
+}
+
 /* ---------- init ---------- */
 
 lockBody();
 render();
+preload();

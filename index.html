@@ -4,9 +4,38 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Bair &amp; Shimi | We're Getting Married</title>
+
+<!-- Warm the big assets as early as possible -->
+<link rel="preload" as="image" href="images/bbg.png">
+<link rel="preload" as="image" href="images/texts/all_text.png">
+<link rel="preload" as="image" href="images/groomhand.png">
+<link rel="preload" as="image" href="images/bridehand.png">
+<link rel="preload" as="image" href="images/groomhandcut.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&family=Poppins:wght@300;400&display=swap">
+
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
+  <!-- LOADING SCREEN — covers everything until the artwork has decoded.
+       Removed from the DOM once done, so it costs nothing afterwards. -->
+  <div class="loader" id="loader">
+    <div class="loader-inner">
+      <div class="loader-ring">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <circle class="ring-track" cx="50" cy="50" r="44"></circle>
+          <circle class="ring-fill"  cx="50" cy="50" r="44" id="ringFill"></circle>
+        </svg>
+        <span class="loader-pct" id="loaderPct">0%</span>
+      </div>
+      <p class="loader-names">Bair <span>&amp;</span> Shimi</p>
+      <p class="loader-msg" id="loaderMsg">Setting the scene</p>
+    </div>
+  </div>
 
   <section class="hero">
 
