@@ -96,7 +96,7 @@ body.locked {
 .flowers {
   position: absolute;
   inset: 0;
-  z-index: 12;
+  z-index: 11;
   pointer-events: none;
 }
 
@@ -148,7 +148,7 @@ body.locked {
   width: auto;
   max-width: 92vw;           /* never let it touch the side edges */
   object-fit: contain;
-  z-index: 11;
+  z-index: 12;
   opacity: 0;                /* hidden on load; JS fades it in after hands arrive */
   will-change: opacity, transform, filter;
   pointer-events: none;
