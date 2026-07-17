@@ -405,9 +405,54 @@ const CRITICAL_ASSETS = [
   "images/groomhandcut.png",
 ].map(toPreferredFormat);
 
+// Warm decorative layers in the background so they are ready when the reveal starts.
+const DECORATIVE_ASSETS = [
+  "images/texts/all_text.png",
+  "images/objects/f1.png",
+  "images/objects/f2.png",
+  "images/objects/f3.png",
+  "images/objects/f4.png",
+  "images/objects/f5.png",
+  "images/objects/f6.png",
+].map(toPreferredFormat);
+
 let loaded = 0;
 let finished = false;
 let shownPct = 0;
+let decorativeStarted = false;
+let decorativeReady = false;
+
+function markDecorativeReady() {
+  if (decorativeReady) return;
+  decorativeReady = true;
+  document.body.classList.add("decorative-ready");
+  hydrateImages("#allText[data-src], .flower[data-src]");
+}
+
+function preloadDecorativeAssets() {
+  if (decorativeStarted) return;
+  decorativeStarted = true;
+
+  let complete = 0;
+  DECORATIVE_ASSETS.forEach((src) => {
+    const img = new Image();
+    let counted = false;
+    const once = () => {
+      if (counted) return;
+      counted = true;
+      complete++;
+      if (complete >= DECORATIVE_ASSETS.length) markDecorativeReady();
+    };
+
+    img.loading = "eager";
+    img.decoding = "async";
+    img.fetchPriority = "low";
+    img.onload = once;
+    img.onerror = once;
+    img.src = src;
+    if (img.complete) once();
+  });
+}
 
 function setProgress(frac) {
   const pct = Math.round(frac * 100);
@@ -434,8 +479,8 @@ function finish() {
 
   setProgress(1);
 
-  // Non-critical layers can load after first frame is ready.
-  hydrateImages("#allText[data-src], .flower[data-src]");
+  // Ensure background preload is running even if critical phase was very short.
+  preloadDecorativeAssets();
 
   // let the ring visibly reach 100% before the curtain lifts
   setTimeout(() => {
@@ -451,6 +496,8 @@ function finish() {
 
 function bumpLoaded() {
   loaded++;
+  // Start decorative preloading as soon as the first critical asset decodes.
+  if (loaded === 1) preloadDecorativeAssets();
   setProgress(Math.min(loaded / CRITICAL_ASSETS.length, 1));
   if (loaded >= CRITICAL_ASSETS.length) finish();
 }
